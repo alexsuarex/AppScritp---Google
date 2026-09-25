@@ -222,6 +222,18 @@ test('segunda ejecución: incremental, sin duplicados', () => {
   assert.strictEqual(ctx.__sheets.OwnerRez.getLastRow(), 3, 'sin filas duplicadas');
 });
 
+test('si se vacía la hoja, vuelve a recorrer todo el histórico', () => {
+  const ctx = createContext({ threads: buildThreads() });
+  ctx.ownerRezSync();
+  const sheet = ctx.__sheets.OwnerRez;
+  sheet.cells.splice(1); // el usuario borra todas las reservas
+  ctx.GmailApp.queries.length = 0;
+  ctx.ownerRezSync();
+
+  assert.ok(ctx.GmailApp.queries.some(q => !/after:/.test(q)), 'hace búsqueda completa');
+  assert.strictEqual(sheet.getLastRow(), 3, 'recupera las 2 reservas');
+});
+
 test('respeta encabezados y filas existentes en la hoja', () => {
   const existing = createFakeSheet('OwnerRez');
   existing.cells[0] = ['Unidad', 'Guest', 'Check-in', 'Check-out', 'Number of nights', 'Number of guests',

@@ -95,6 +95,13 @@ function ownerRezSync() {
     const store = ownerRezLoadStore_(ownerRezGetSheet_());
     const stats = { read: 0, added: 0, updated: 0, unchanged: 0, skipped: 0, errors: 0 };
 
+    // Si la hoja quedó vacía (p. ej. se borraron las filas), vuelve a recorrer
+    // todo el histórico en lugar de solo los correos recientes.
+    if (store.index.size === 0 && props.getProperty(OWNERREZ_PROPS.BACKFILL_DONE) === 'true') {
+      Logger.log('OwnerRez: la hoja está vacía, se recorrerá de nuevo todo el histórico.');
+      ownerRezResetBackfill();
+    }
+
     let backfillDone = props.getProperty(OWNERREZ_PROPS.BACKFILL_DONE) === 'true';
     if (!backfillDone) {
       backfillDone = ownerRezBackfill_(store, props, stats, startedAt);
