@@ -3,7 +3,8 @@
  *
  * Rastrea TODOS los correos enviados por el remitente de notificaciones de
  * OwnerRez (La Paz Bay Rentals), extrae los datos de la reserva y los guarda
- * en la hoja "OwnerRez".
+ * en la hoja "RESERVAS": las reservas nuevas se agregan al final en filas
+ * nuevas; las modificaciones/cancelaciones actualizan la fila existente.
  *
  * - Primera ejecución: recorre todo el histórico del remitente (backfill) en
  *   bloques; si no termina dentro del límite de tiempo, continúa en la
@@ -19,7 +20,7 @@
 
 const OWNERREZ_CONFIG = {
   SENDER: 'oru5b14b666b9x@inquiryspot.com',
-  SHEET_NAME: 'OwnerRez',
+  SHEET_NAME: 'RESERVAS',
   HEADERS: [
     'Unidad',
     'Guest',
@@ -65,6 +66,7 @@ const OWNERREZ_COL = {
 const OWNERREZ_PROPS = {
   BACKFILL_OFFSET: 'OWNERREZ_BACKFILL_OFFSET',
   BACKFILL_DONE: 'OWNERREZ_BACKFILL_DONE',
+  BACKFILL_SHEET: 'OWNERREZ_BACKFILL_SHEET',
   LAST_SYNC: 'OWNERREZ_LAST_SYNC'
 };
 
@@ -97,10 +99,14 @@ function ownerRezSync() {
 
     // Si la hoja quedó vacía (p. ej. se borraron las filas), vuelve a recorrer
     // todo el histórico en lugar de solo los correos recientes.
-    if (store.index.size === 0 && props.getProperty(OWNERREZ_PROPS.BACKFILL_DONE) === 'true') {
-      Logger.log('OwnerRez: la hoja está vacía, se recorrerá de nuevo todo el histórico.');
+    // Lo mismo si el histórico se cargó en otra hoja (cambió SHEET_NAME).
+    const backfillSheet = props.getProperty(OWNERREZ_PROPS.BACKFILL_SHEET);
+    if (props.getProperty(OWNERREZ_PROPS.BACKFILL_DONE) === 'true' &&
+        (store.index.size === 0 || backfillSheet !== OWNERREZ_CONFIG.SHEET_NAME)) {
+      Logger.log(`OwnerRez: se recorrerá de nuevo todo el histórico hacia "${OWNERREZ_CONFIG.SHEET_NAME}".`);
       ownerRezResetBackfill();
     }
+    props.setProperty(OWNERREZ_PROPS.BACKFILL_SHEET, OWNERREZ_CONFIG.SHEET_NAME);
 
     let backfillDone = props.getProperty(OWNERREZ_PROPS.BACKFILL_DONE) === 'true';
     if (!backfillDone) {
@@ -388,13 +394,6 @@ function ownerRezGetSheet_() {
     sheet.setFrozenRows(1);
   }
 
-  const maxRows = sheet.getMaxRows();
-  if (maxRows > 1) {
-    const format = OWNERREZ_CONFIG.DATE_FORMAT;
-    sheet.getRange(2, OWNERREZ_COL.CHECK_IN + 1, maxRows - 1, 2).setNumberFormat(format);
-    sheet.getRange(2, OWNERREZ_COL.FECHA_MAIL + 1, maxRows - 1, 1).setNumberFormat(format);
-  }
-
   return sheet;
 }
 
@@ -472,25 +471,28 @@ function ownerRezFlush_(store) {
   const width = OWNERREZ_CONFIG.HEADERS.length;
 
   store.dirty.forEach(entry => {
-    const range = sheet.getRange(entry.row, 1, 1, width);
-    range.setValues([entry.values]);
-    ownerRezApplyColors_(range, [entry.values]);
+    sheet.getRange(entry.row, 1, 1, width).setValues([entry.values]);
+    ownerRezFormatRows_(sheet, entry.row, [entry.values]);
   });
   store.dirty.clear();
 
   if (store.pending.length > 0) {
     const firstRow = sheet.getLastRow() + 1;
     const rows = store.pending.map(entry => entry.values);
-    const range = sheet.getRange(firstRow, 1, rows.length, width);
-    range.setValues(rows);
-    ownerRezApplyColors_(range, rows);
+    sheet.getRange(firstRow, 1, rows.length, width).setValues(rows);
+    ownerRezFormatRows_(sheet, firstRow, rows);
     store.pending.forEach((entry, i) => { entry.row = firstRow + i; });
     store.pending = [];
   }
 }
 
-function ownerRezApplyColors_(range, rows) {
+/**
+ * Color por status y formato de fecha, solo en las filas que escribe el script
+ * (no toca el formato del resto de la hoja).
+ */
+function ownerRezFormatRows_(sheet, firstRow, rows) {
   const width = OWNERREZ_CONFIG.HEADERS.length;
+  const format = OWNERREZ_CONFIG.DATE_FORMAT;
   const backgrounds = [];
   const fonts = [];
 
@@ -500,8 +502,11 @@ function ownerRezApplyColors_(range, rows) {
     fonts.push(new Array(width).fill(color.font));
   });
 
+  const range = sheet.getRange(firstRow, 1, rows.length, width);
   range.setBackgrounds(backgrounds);
   range.setFontColors(fonts);
+  sheet.getRange(firstRow, OWNERREZ_COL.CHECK_IN + 1, rows.length, 2).setNumberFormat(format);
+  sheet.getRange(firstRow, OWNERREZ_COL.FECHA_MAIL + 1, rows.length, 1).setNumberFormat(format);
 }
 
 function ownerRezToast_(message) {

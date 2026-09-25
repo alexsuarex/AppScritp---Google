@@ -2,7 +2,7 @@
 
 ## `src/OwnerRez.js`
 
-Rastrea **todos** los correos de `oru5b14b666b9x@inquiryspot.com` (notificaciones de La Paz Bay Rentals / OwnerRez), extrae la reserva y la guarda en la hoja **OwnerRez**.
+Rastrea **todos** los correos de `oru5b14b666b9x@inquiryspot.com` (notificaciones de La Paz Bay Rentals / OwnerRez), extrae la reserva y la guarda en la hoja **RESERVAS** (configurable en `OWNERREZ_CONFIG.SHEET_NAME`). Las reservas nuevas se agregan **al final, en filas nuevas**; el script no cambia el formato de las filas que ya existen.
 
 | Col | Campo | Origen en el correo |
 |-----|-------|---------------------|
@@ -21,6 +21,7 @@ Rastrea **todos** los correos de `oru5b14b666b9x@inquiryspot.com` (notificacione
 - **Primera ejecución:** recorre todo el histórico del remitente. Si no termina en ~4.5 min, guarda en qué punto se quedó y sigue en la siguiente ejecución.
 - **Después:** solo revisa los correos recientes (desde la última ejecución, con 2 días de margen).
 - **Sin duplicados:** cada reserva se identifica por su *Confirmation code*. Un correo solo modifica la fila si es **más nuevo** que el último aplicado. Así, una cancelación o modificación actualiza la misma fila sin importar el orden en que se lean los correos.
+- Si la hoja queda vacía o se cambia `SHEET_NAME`, la siguiente ejecución vuelve a recorrer todo el histórico.
 - Si un correo nuevo trae un campo vacío, se conserva el valor anterior.
 - Los correos que no son reservas (p. ej. *inquiries*) se omiten y quedan registrados en el log.
 

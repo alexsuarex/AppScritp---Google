@@ -186,8 +186,8 @@ test('backfill: crea la hoja, inserta y aplica la cancelación aunque llegue pri
   const ctx = createContext({ threads: buildThreads() });
   ctx.ownerRezSync();
 
-  const sheet = ctx.__sheets.OwnerRez;
-  assert.ok(sheet, 'la hoja OwnerRez debe crearse');
+  const sheet = ctx.__sheets.RESERVAS;
+  assert.ok(sheet, 'la hoja RESERVAS debe crearse');
   assert.deepStrictEqual(sheet.cells[0].slice(0, 3), ['Unidad', 'Guest', 'Check-in']);
   assert.strictEqual(sheet.getLastRow(), 3, 'encabezado + 2 reservas');
 
@@ -206,7 +206,7 @@ test('orden cronológico normal: la cancelación conserva campos que no trae', (
   const threads = buildThreads().reverse();
   const ctx = createContext({ threads });
   ctx.ownerRezSync();
-  const row = ctx.__sheets.OwnerRez.cells.slice(1).find(r => r[6] === 'HMN8MSB98K');
+  const row = ctx.__sheets.RESERVAS.cells.slice(1).find(r => r[6] === 'HMN8MSB98K');
   assert.strictEqual(row[8], 'Cancelada');
   assert.strictEqual(row[4], 3, 'conserva Number of nights del correo original');
 });
@@ -219,13 +219,13 @@ test('segunda ejecución: incremental, sin duplicados', () => {
   ctx.ownerRezSync();
 
   assert.ok(ctx.GmailApp.queries.every(q => /after:\d+/.test(q)), 'usa búsqueda incremental');
-  assert.strictEqual(ctx.__sheets.OwnerRez.getLastRow(), 3, 'sin filas duplicadas');
+  assert.strictEqual(ctx.__sheets.RESERVAS.getLastRow(), 3, 'sin filas duplicadas');
 });
 
 test('si se vacía la hoja, vuelve a recorrer todo el histórico', () => {
   const ctx = createContext({ threads: buildThreads() });
   ctx.ownerRezSync();
-  const sheet = ctx.__sheets.OwnerRez;
+  const sheet = ctx.__sheets.RESERVAS;
   sheet.cells.splice(1); // el usuario borra todas las reservas
   ctx.GmailApp.queries.length = 0;
   ctx.ownerRezSync();
@@ -234,12 +234,33 @@ test('si se vacía la hoja, vuelve a recorrer todo el histórico', () => {
   assert.strictEqual(sheet.getLastRow(), 3, 'recupera las 2 reservas');
 });
 
+test('RESERVAS con datos previos: agrega al final y hace barrido completo tras cambiar de hoja', () => {
+  const reservas = createFakeSheet('RESERVAS');
+  reservas.cells[0] = ['Unidad', 'Guest', 'Check-in', 'Check-out', 'Number of nights', 'Number of guests',
+    'Confirmation code', 'Source', 'status', 'fechaMail'];
+  reservas.cells[1] = ['A09692-LAP-ROSALES', 'Roxanne Baker', '23/3/2025', '25/3/2025', 2, 2, 'HMEBQ5TFRT', 'Airbnb', 'Confirmada', '22/02/2025'];
+  reservas.cells[2] = ['B09615-LAP-HAIG', 'Jean Birnberg', '23/3/2025', '29/3/2025', 6, 8, 'HA-gqglU2w', 'VRBO', 'Modificado', '13/03/2025'];
+  const before = JSON.stringify(reservas.cells.slice(0, 3));
+
+  const ctx = createContext({ threads: buildThreads(), sheets: { RESERVAS: reservas } });
+  // Estado que dejó la versión anterior (histórico ya cargado en la hoja OwnerRez)
+  ctx.__props.OWNERREZ_BACKFILL_DONE = 'true';
+  ctx.__props.OWNERREZ_BACKFILL_SHEET = 'OwnerRez';
+  ctx.__props.OWNERREZ_LAST_SYNC = String(Date.now());
+  ctx.ownerRezSync();
+
+  assert.strictEqual(JSON.stringify(reservas.cells.slice(0, 3)), before, 'no toca filas existentes');
+  assert.strictEqual(reservas.getLastRow(), 5, 'agrega 2 filas nuevas al final');
+  assert.deepStrictEqual(reservas.cells.slice(3).map(r => r[6]).sort(), ['HMN8MSB98K', 'HMPQMPD4JC']);
+  assert.strictEqual(ctx.__props.OWNERREZ_BACKFILL_SHEET, 'RESERVAS');
+});
+
 test('respeta encabezados y filas existentes en la hoja', () => {
-  const existing = createFakeSheet('OwnerRez');
+  const existing = createFakeSheet('RESERVAS');
   existing.cells[0] = ['Unidad', 'Guest', 'Check-in', 'Check-out', 'Number of nights', 'Number of guests',
     'Confirmation code', 'Source', 'status', 'fechaMail'];
   existing.cells[1] = ['Casa Hispania 334', 'Julio', '', '', 3, 4, 'HMN8MSB98K', 'Airbnb', 'Confirmada', '19/09/2026'];
-  const ctx = createContext({ threads: buildThreads(), sheets: { OwnerRez: existing } });
+  const ctx = createContext({ threads: buildThreads(), sheets: { RESERVAS: existing } });
   ctx.ownerRezSync();
 
   assert.strictEqual(existing.cells[0][10], undefined, 'no agrega columnas extra');
