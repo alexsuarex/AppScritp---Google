@@ -1,0 +1,8 @@
+{
+  "name": "appscript-google",
+  "private": true,
+  "description": "Scripts de Google Apps Script para extraer reservaciones de Gmail a Google Sheets",
+  "scripts": {
+    "test": "node tests/ownerrez.test.js"
+  }
+}
