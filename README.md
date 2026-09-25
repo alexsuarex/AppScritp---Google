@@ -16,7 +16,6 @@ Rastrea **todos** los correos de `oru5b14b666b9x@inquiryspot.com` (notificacione
 | H | Source | |
 | I | status | `Confirmada` / `Modificado` (naranja) / `Cancelada` (rojo), según el asunto |
 | J | fechaMail | fecha y hora del correo (se muestra `dd/mm/yyyy`) |
-| K | messageId | ID del último correo aplicado (trazabilidad) |
 
 ### Cómo funciona
 - **Primera ejecución:** recorre todo el histórico del remitente. Si no termina en ~4.5 min, guarda en qué punto se quedó y sigue en la siguiente ejecución.

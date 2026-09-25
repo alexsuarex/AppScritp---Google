@@ -194,7 +194,7 @@ test('backfill: crea la hoja, inserta y aplica la cancelación aunque llegue pri
   const byCode = Object.fromEntries(sheet.cells.slice(1).map((row, i) => [row[6], { row, color: sheet.colors[i + 1] }]));
   assert.strictEqual(byCode.HMN8MSB98K.row[8], 'Cancelada');
   assert.strictEqual(byCode.HMN8MSB98K.row[4], '', 'la cancelación sin noches no borra dato (no había previo)');
-  assert.strictEqual(byCode.HMN8MSB98K.row[10], 'm3');
+  assert.strictEqual(byCode.HMN8MSB98K.row.length, 10, 'sin columna messageId');
   assert.strictEqual(byCode.HMN8MSB98K.color, 'red');
   assert.strictEqual(byCode.HMPQMPD4JC.row[0], 'Depto Legaspy 1');
   assert.strictEqual(byCode.HMPQMPD4JC.row[8], 'Confirmada');
@@ -230,7 +230,7 @@ test('respeta encabezados y filas existentes en la hoja', () => {
   const ctx = createContext({ threads: buildThreads(), sheets: { OwnerRez: existing } });
   ctx.ownerRezSync();
 
-  assert.strictEqual(existing.cells[0][10], 'messageId', 'agrega el encabezado faltante');
+  assert.strictEqual(existing.cells[0][10], undefined, 'no agrega columnas extra');
   assert.strictEqual(existing.getLastRow(), 3);
   assert.strictEqual(existing.cells[1][8], 'Cancelada', 'actualiza la fila existente en su lugar');
 });

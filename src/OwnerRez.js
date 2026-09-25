@@ -30,8 +30,7 @@ const OWNERREZ_CONFIG = {
     'Confirmation code',
     'Source',
     'status',
-    'fechaMail',
-    'messageId'
+    'fechaMail'
   ],
   STATUS: {
     NEW: 'Confirmada',
@@ -60,8 +59,7 @@ const OWNERREZ_COL = {
   CODE: 6,
   SOURCE: 7,
   STATUS: 8,
-  FECHA_MAIL: 9,
-  MESSAGE_ID: 10
+  FECHA_MAIL: 9
 };
 
 const OWNERREZ_PROPS = {
@@ -192,7 +190,6 @@ function ownerRezProcessThreads_(threads, store, stats) {
         }
 
         reservation.fechaMail = message.getDate();
-        reservation.messageId = message.getId();
         stats[ownerRezUpsert_(store, reservation)]++;
       } catch (e) {
         stats.errors++;
@@ -450,7 +447,6 @@ function ownerRezToRow_(r) {
   row[OWNERREZ_COL.SOURCE] = r.source;
   row[OWNERREZ_COL.STATUS] = r.status;
   row[OWNERREZ_COL.FECHA_MAIL] = r.fechaMail;
-  row[OWNERREZ_COL.MESSAGE_ID] = r.messageId;
   return row;
 }
 
