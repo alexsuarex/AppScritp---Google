@@ -47,3 +47,14 @@ Rastrea **todos** los correos de `oru5b14b666b9x@inquiryspot.com` (notificacione
 npm test
 ```
 Prueban el parser con el template real (`tests/fixtures/new-reservation.html`) y la sincronización con stubs de Gmail/Sheets.
+
+## `src/Reservations.js`
+
+Versión optimizada del script `extractReservations` (La Paz Bay + Guesty → hoja **RESERVAS**).
+
+- La hoja se lee **una sola vez** por ejecución y se usa un índice en memoria (*Confirmation code* → fila). Antes se leía completa en `isAlreadyProcessed` y en `findReservationRow` por cada correo y por cada fila del reporte de Guesty.
+- Los mensajes de Gmail se obtienen en lote (`GmailApp.getMessagesForThreads`).
+- **La extracción no cambió:** `extractData`, `convertDateFormat`, `extractGuestyTableData`, `convertGuestyDate`, `getOrCreateSheet`, `applyRowFormatting`, `createTimeDrivenTrigger` y `onOpen` son idénticas al original.
+- `processMessage`, `addToSheet`, `findReservationRow`, `isAlreadyProcessed` y `processGuestyReservation` siguen aceptando la hoja como primer parámetro, por si otro archivo del proyecto las llama.
+
+`tests/reservations.test.js` ejecuta el original (`tests/fixtures/legacy-reservations.js`) y la versión optimizada con los mismos datos (10,000 filas) y verifica que la hoja, los colores y el resumen queden idénticos.
