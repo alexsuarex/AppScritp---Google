@@ -55,6 +55,7 @@ Versión optimizada del script `extractReservations` (La Paz Bay + Guesty → ho
 - La hoja se lee **una sola vez** por ejecución y se usa un índice en memoria (*Confirmation code* → fila). Antes se leía completa en `isAlreadyProcessed` y en `findReservationRow` por cada correo y por cada fila del reporte de Guesty.
 - Los mensajes de Gmail se obtienen en lote (`GmailApp.getMessagesForThreads`).
 - **La extracción no cambió:** `extractData`, `convertDateFormat`, `extractGuestyTableData`, `convertGuestyDate`, `getOrCreateSheet`, `applyRowFormatting`, `createTimeDrivenTrigger` y `onOpen` son idénticas al original.
+- **Guesty:** una reserva existente solo se reescribe (y se cuenta como actualizada) si algún dato cambió de verdad. Antes se comparaba texto contra los números y fechas que devuelve la hoja (`'3'` vs `3`), así que siempre parecía distinta. Ver `normalizeForCompare`.
 - `processMessage`, `addToSheet`, `findReservationRow`, `isAlreadyProcessed` y `processGuestyReservation` siguen aceptando la hoja como primer parámetro, por si otro archivo del proyecto las llama.
 
-`tests/reservations.test.js` ejecuta el original (`tests/fixtures/legacy-reservations.js`) y la versión optimizada con los mismos datos (10,000 filas) y verifica que la hoja, los colores y el resumen queden idénticos.
+`tests/reservations.test.js` ejecuta el original (`tests/fixtures/legacy-reservations.js`) y la versión optimizada con los mismos datos (10,000 filas) y verifica que la hoja, los colores y el resumen queden idénticos para La Paz Bay; además prueba la nueva comparación de Guesty.

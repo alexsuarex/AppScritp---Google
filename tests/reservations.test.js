@@ -21,8 +21,21 @@ function formatDate(date, tz, fmt) {
     .replace('dd', pad(date.getDate()));
 }
 
-function createSheet(initialRows) {
-  const cells = initialRows.map(r => r.slice());
+/**
+ * Imita la conversión automática de Google Sheets al escribir texto:
+ * '3' -> 3 y '23/09/2026' -> fecha. getValues() devuelve esos tipos.
+ */
+function sheetsConvert(value) {
+  if (typeof value !== 'string') return value;
+  if (/^\d+$/.test(value)) return Number(value);
+  const m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return value;
+}
+
+function createSheet(initialRows, { convert = false } = {}) {
+  const toCell = v => (convert ? sheetsConvert(v) : v);
+  const cells = initialRows.map(r => r.map(toCell));
   const format = {}; // fila -> {background, font, weight}
   const stats = { fullReads: 0, rowReads: 0 };
   const lastRow = () => {
@@ -46,15 +59,16 @@ function createSheet(initialRows) {
     getDataRange: () => ({
       getValues: () => { stats.fullReads++; return read(1, 1, lastRow(), lastCol()); }
     }),
-    appendRow: values => { cells[lastRow()] = Array.from(values); }, // copia en arrays de este contexto
+    appendRow: values => { cells[lastRow()] = Array.from(values, toCell); }, // copia en arrays de este contexto
+    getParent: () => ({ getSpreadsheetTimeZone: () => TZ }),
     setFrozenRows: () => {},
     autoResizeColumn: () => {},
     getRange: (row, col, nr = 1, nc = 1) => ({
       getValues: () => { stats.rowReads++; return read(row, col, nr, nc); },
-      setValues: values => values.forEach((rv, i) => rv.forEach((v, j) => {
+      setValues: values => { stats.writes = (stats.writes || 0) + 1; values.forEach((rv, i) => rv.forEach((v, j) => {
         cells[row - 1 + i] = cells[row - 1 + i] || [];
-        cells[row - 1 + i][col - 1 + j] = v;
-      })),
+        cells[row - 1 + i][col - 1 + j] = toCell(v);
+      })); },
       setBackground: v => { (format[row] = format[row] || {}).background = v; },
       setFontColor: v => { (format[row] = format[row] || {}).font = v; },
       setFontWeight: v => { (format[row] = format[row] || {}).weight = v; }
@@ -71,8 +85,8 @@ function msg(id, date, html, plain = '') {
   return { getId: () => id, getDate: () => date, getBody: () => html, getPlainBody: () => plain };
 }
 
-function runScript(file, { sheetRows, threadsBySubject }) {
-  const sheet = createSheet(sheetRows);
+function runScript(file, { sheetRows, threadsBySubject, convert = false }) {
+  const sheet = createSheet(sheetRows, { convert });
   const toasts = [];
   const context = {
     console,
@@ -173,16 +187,21 @@ const threadsBySubject = {
   ]
 };
 
-/* ---------- Ejecución ---------- */
+/* ---------- Equivalencia con el original (La Paz Bay) ---------- */
+// Guesty cambió a propósito (ver pruebas de abajo), así que se excluye aquí.
+const GUESTY_SUBJECT = 'Guesty shared A096 - Check In Next 7 Days (Tiffany)';
+const lpbThreads = Object.assign({}, threadsBySubject);
+delete lpbThreads[GUESTY_SUBJECT];
+
 const ROWS = 10000;
 const legacyFile = path.join(__dirname, 'fixtures/legacy-reservations.js');
 const optimizedFile = path.join(__dirname, '../src/Reservations.js');
 
 let t = Date.now();
-const legacy = runScript(legacyFile, { sheetRows: buildSheetRows(ROWS), threadsBySubject });
+const legacy = runScript(legacyFile, { sheetRows: buildSheetRows(ROWS), threadsBySubject: lpbThreads });
 const legacyMs = Date.now() - t;
 t = Date.now();
-const optimized = runScript(optimizedFile, { sheetRows: buildSheetRows(ROWS), threadsBySubject });
+const optimized = runScript(optimizedFile, { sheetRows: buildSheetRows(ROWS), threadsBySubject: lpbThreads });
 const optimizedMs = Date.now() - t;
 
 assert.deepStrictEqual(optimized.sheet.cells, legacy.sheet.cells, 'la hoja debe quedar idéntica');
@@ -195,10 +214,70 @@ const byCode = code => legacy.sheet.cells.findIndex(r => r[6] === code) + 1;
 assert.strictEqual(legacy.sheet.cells[11][1], 'Blanca Estela Vera', 'duplicado: se actualizó la primera fila (HMCODE10)');
 assert.strictEqual(legacy.sheet.cells[50][1], 'Guest 49', 'la fila duplicada posterior no se toca');
 assert.notStrictEqual(legacy.sheet.cells[70][1], 'Guest 69', 'el correo sin código sobrescribió la primera fila sin código (comportamiento original)');
-assert.ok(byCode('GY-NEW-1') > ROWS, 'Guesty agregó al final');
 assert.strictEqual(legacy.sheet.format[byCode('HMCODE7')].background, 'red');
 
-console.log('✓ hoja, colores y resumen idénticos al script original');
+console.log('✓ La Paz Bay: hoja, colores y resumen idénticos al script original');
 console.log(`  Lecturas completas de la hoja: original ${legacy.sheet.stats.fullReads}, optimizado ${optimized.sheet.stats.fullReads}`);
 console.log(`  Tiempo local con ${ROWS} filas: original ${legacyMs} ms, optimizado ${optimizedMs} ms`);
 console.log(`  Resumen: ${optimized.toasts[0].replace('\n', ' | ')}`);
+
+/* ---------- Guesty: solo se reescribe si algo cambió de verdad ---------- */
+function guestyRow(overrides = {}) {
+  const r = { confirmed: '2026-08-01 10:00 AM', unit: 'A020-LAP-UNIT', checkIn: '2026-01-01 03:00 PM', checkOut: '2026-01-03 11:00 AM',
+    nights: '2', guest: 'Guest 20', guests: '2', code: 'HMCODE20', source: 'Airbnb', ...overrides };
+  return [r.confirmed, r.unit, r.checkIn, r.checkOut, r.nights, r.guest, r.guests, '555', r.code, '', r.source, ''];
+}
+
+function runGuesty(file, rows, sheetRows = buildSheetRows(100)) {
+  return runScript(file, {
+    sheetRows,
+    convert: true, // la hoja guarda números y fechas, como Google Sheets
+    threadsBySubject: { [GUESTY_SUBJECT]: [thread([msg('g', new Date(2026, 8, 25), guestyReport(rows))])] }
+  });
+}
+
+const cellsOf = (result, code) => result.sheet.cells.find(r => r[6] === code);
+
+// 1. Reserva idéntica: el original la contaba como actualizada, ahora no.
+{
+  const before = runGuesty(legacyFile, [guestyRow()]);
+  const after = runGuesty(optimizedFile, [guestyRow()]);
+  assert.ok(before.toasts[0].includes('0 nuevas, 1 actualizadas'), 'el original reportaba un cambio falso');
+  assert.ok(after.toasts[0].includes('0 nuevas, 0 actualizadas'), 'sin cambios reales -> 0 actualizadas');
+  assert.strictEqual(after.sheet.stats.writes || 0, 0, 'no reescribe la fila');
+  assert.strictEqual(cellsOf(after, 'HMCODE20')[9].getMonth(), 11, 'conserva fechaMail (01/12/2025)');
+  console.log('✓ Guesty: reserva sin cambios ya no se reescribe ni se cuenta como actualizada');
+}
+
+// 2. Cambio real (check-out distinto): se actualiza y conserva el status.
+{
+  const sheetRows = buildSheetRows(100);
+  sheetRows[21][8] = 'Modificada';
+  const after = runGuesty(optimizedFile, [guestyRow({ checkOut: '2026-01-04 11:00 AM', nights: '3' })], sheetRows);
+  const row = cellsOf(after, 'HMCODE20');
+  assert.ok(after.toasts[0].includes('1 actualizadas'));
+  assert.strictEqual(row[3].getDate(), 4, 'nuevo check-out');
+  assert.strictEqual(row[4], 3, 'nuevas noches');
+  assert.strictEqual(row[8], 'Modificada', 'conserva el status');
+  console.log('✓ Guesty: un cambio real sí se actualiza y conserva el status');
+}
+
+// 3. Fechas escritas como texto sin ceros ('1/1/2026') y espacios extra: siguen siendo iguales.
+{
+  const sheetRows = buildSheetRows(100);
+  sheetRows[21] = ['A020-LAP-UNIT ', 'Guest 20', '1/1/2026', '3/1/2026', 2, '2', 'HMCODE20', 'Airbnb', 'Confirmada', '01/12/2025'];
+  const after = runScript(optimizedFile, {
+    sheetRows,
+    threadsBySubject: { [GUESTY_SUBJECT]: [thread([msg('g', new Date(2026, 8, 25), guestyReport([guestyRow()]))])] }
+  });
+  assert.ok(after.toasts[0].includes('0 actualizadas'));
+  console.log('✓ Guesty: fecha como texto "1/1/2026" = "01/01/2026", texto "2" = 2 y espacios extra');
+}
+
+// 4. Reservas nuevas se siguen agregando al final.
+{
+  const after = runGuesty(optimizedFile, [guestyRow({ code: 'GY-NEW-1', unit: 'A096-GUESTY-1' })]);
+  assert.ok(after.toasts[0].includes('1 nuevas, 0 actualizadas'));
+  assert.strictEqual(after.sheet.cells[after.sheet.cells.length - 1][6], 'GY-NEW-1');
+  console.log('✓ Guesty: reservas nuevas se agregan al final');
+}

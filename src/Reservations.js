@@ -7,6 +7,9 @@
  * hoja completa varias veces por cada correo. La extracción de datos de los
  * correos (extractData, convertDateFormat, extractGuestyTableData,
  * convertGuestyDate) no cambió.
+ *
+ * Guesty: una reserva existente solo se reescribe si algún dato cambió de
+ * verdad (se comparan valores normalizados, ver normalizeForCompare).
  */
 
 function extractReservations() {
@@ -629,14 +632,19 @@ function processGuestyReservation(sheetOrIndex, guestyData) {
     // Verificar si hay cambios en los datos
     const existingData = getIndexedRowValues(index, existingRow);
 
+    // Se comparan valores normalizados: la hoja devuelve números y fechas,
+    // mientras que Guesty entrega todo como texto ('3' vs 3, '23/09/2026' vs Date)
+    const differs = (sheetValue, guestyValue) =>
+      normalizeForCompare(index, sheetValue) !== normalizeForCompare(index, guestyValue);
+
     const hasChanges = (
-      existingData[0] !== data.unidad ||
-      existingData[1] !== data.guest ||
-      existingData[2] !== data.checkIn ||
-      existingData[3] !== data.checkOut ||
-      existingData[4] !== data.numberOfNights ||
-      existingData[5] !== data.numberOfGuests ||
-      existingData[7] !== data.source
+      differs(existingData[0], data.unidad) ||
+      differs(existingData[1], data.guest) ||
+      differs(existingData[2], data.checkIn) ||
+      differs(existingData[3], data.checkOut) ||
+      differs(existingData[4], data.numberOfNights) ||
+      differs(existingData[5], data.numberOfGuests) ||
+      differs(existingData[7], data.source)
     );
 
     if (hasChanges) {
@@ -686,6 +694,38 @@ function processGuestyReservation(sheetOrIndex, guestyData) {
     Logger.log('Nueva reserva de Guesty agregada: ' + data.confirmationCode);
     return 'added';
   }
+}
+
+/**
+ * Normaliza un valor para compararlo sin importar su tipo:
+ *  - Fecha (como la devuelve la hoja)  -> 'dd/MM/yyyy'
+ *  - Texto con fecha '2/3/2025'        -> '02/03/2025'
+ *  - Número 3 o texto '3'              -> '3'
+ *  - Vacío / null                      -> ''
+ */
+function normalizeForCompare(index, value) {
+  if (value === null || value === undefined) return '';
+  
+  if (typeof value.getTime === 'function') {
+    // Las fechas de la hoja se interpretan en la zona horaria de la hoja
+    if (!index.timeZone) {
+      index.timeZone = index.sheet.getParent().getSpreadsheetTimeZone();
+    }
+    return Utilities.formatDate(value, index.timeZone, 'dd/MM/yyyy');
+  }
+  
+  const text = String(value).trim();
+  
+  const dateMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dateMatch) {
+    return dateMatch[1].padStart(2, '0') + '/' + dateMatch[2].padStart(2, '0') + '/' + dateMatch[3];
+  }
+  
+  if (text !== '' && !isNaN(Number(text))) {
+    return String(Number(text)); // '3', '3.0' y 3 -> '3'
+  }
+  
+  return text;
 }
 
 /**
